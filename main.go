@@ -331,7 +331,7 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
-		c.dialer = proxy.Direct
+		c.dialer = proxy.FromEnvironment()
 	}
 
 	tmp, err := dnsclient.New(c.UpstreamDNS, true, c.UpstreamSOCKS5)
