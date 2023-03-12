@@ -2,9 +2,6 @@ name: Go
 
 on:
   push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
 
 jobs:
 
@@ -31,6 +28,15 @@ jobs:
 
     - name: Build
       run: go build -v .
+      
+    - name: list result
+      run: ls -al
+    - name: Archive sniproxy
+      uses: actions/upload-artifact@v3
+      with:
+        name: sniproxy
+        path: |
+          sniproxy
 
     - name: Test
       run: go test -v .
