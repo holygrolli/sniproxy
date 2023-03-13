@@ -331,7 +331,10 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
-		c.dialer = proxy.FromEnvironment()
+		customDialer := &net.Dialer{
+            		Timeout: 10 * time.Second
+		}
+		c.dialer = proxy.FromEnvironment(customDialer)
 	}
 
 	tmp, err := dnsclient.New(c.UpstreamDNS, true, c.UpstreamSOCKS5)
