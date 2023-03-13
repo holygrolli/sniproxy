@@ -332,7 +332,7 @@ func main() {
 		}
 	} else {
 		customDialer := &net.Dialer{
-            		Timeout: 10 * time.Second
+            		Timeout: 10 * time.Second,
 		}
 		c.dialer = proxy.FromEnvironment(customDialer)
 	}
