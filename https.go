@@ -80,6 +80,7 @@ func handle443(conn net.Conn) error {
 	)
 	var target *net.TCPConn
 	if c.dialer == proxy.Direct {
+		httpslog.Info("should NOT use proxy", rAddr, rPort)
 		// with the manipulation of the soruce address, we can set the outbound interface
 		srcAddr := net.TCPAddr{
 			IP:   c.sourceAddr,
@@ -92,6 +93,7 @@ func handle443(conn net.Conn) error {
 			return err
 		}
 	} else {
+		httpslog.Info("should use proxy", rAddr, rPort)
 		tmp, err := c.dialer.Dial("tcp", fmt.Sprintf("%s:%d", rAddr, rPort))
 		if err != nil {
 			httpslog.Error("could not connect to target", err)
