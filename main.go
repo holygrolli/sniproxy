@@ -334,7 +334,7 @@ func main() {
 		customDialer := &net.Dialer{
             		Timeout: 10 * time.Second,
 		}
-		c.dialer = proxy.FromEnvironment(customDialer)
+		c.dialer = proxy.FromEnvironmentUsing(customDialer)
 	}
 
 	tmp, err := dnsclient.New(c.UpstreamDNS, true, c.UpstreamSOCKS5)
