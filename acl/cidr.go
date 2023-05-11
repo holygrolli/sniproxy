@@ -46,7 +46,7 @@ func (d *cidr) LoadCIDRCSV(path string) error {
 			d.logger.Err(err)
 			return err
 		}
-		d.logger.Info().Msgf("(re)fetching URL: ", path)
+		d.logger.Info().Msgf("(re)fetching URL: %s", path)
 		defer resp.Body.Close()
 		scanner = bufio.NewScanner(resp.Body)
 
@@ -55,7 +55,7 @@ func (d *cidr) LoadCIDRCSV(path string) error {
 		if err != nil {
 			return err
 		}
-		d.logger.Info().Msgf("(re)loading file: ", path)
+		d.logger.Info().Msgf("(re)loading file: %s", path)
 		defer file.Close()
 		scanner = bufio.NewScanner(file)
 	}
