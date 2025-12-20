@@ -147,13 +147,16 @@ func processQuestion(c *Config, l zerolog.Logger, q dns.Question, decision acl.D
 		c.ProxiedDNS.Inc(1)
 		l.Info().Msgf("returned sniproxy address for domain %s", q.Name)
 
+		// Get current public IPs (will auto-refresh if needed)
+		ipv4, ipv6 := c.GetPublicIPs()
+
 		if q.Qtype == dns.TypeA {
-			rr, err := dns.NewRR(fmt.Sprintf("%s A %s", q.Name, c.PublicIPv4))
+			rr, err := dns.NewRR(fmt.Sprintf("%s A %s", q.Name, ipv4))
 			return []dns.RR{rr}, err
 		}
 		if q.Qtype == dns.TypeAAAA {
-			if c.PublicIPv6 != "" {
-				rr, err := dns.NewRR(fmt.Sprintf("%s AAAA %s", q.Name, c.PublicIPv6))
+			if ipv6 != "" {
+				rr, err := dns.NewRR(fmt.Sprintf("%s AAAA %s", q.Name, ipv6))
 				return []dns.RR{rr}, err
 			}
 			// return an empty response if we don't have an IPv6 address

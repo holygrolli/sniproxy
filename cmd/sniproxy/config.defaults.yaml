@@ -45,6 +45,8 @@ general:
   public_ipv6:
   # FQDN to resolve for determining public IPv4 and IPv6 addresses. When set, this overrides public_ipv4 and public_ipv6 settings.
   public_ip_dns:
+  # Interval in seconds to refresh public IP addresses when public_ip_dns is set. 0 means no refresh (only at startup). Default: 300 (5 minutes)
+  public_ip_refresh_interval: 300
   # allow connections from sniproxy to RFC1918 addresses. default is false.
   allow_conn_to_local: false
   # log level for the application. choices: debug, info, warn, error

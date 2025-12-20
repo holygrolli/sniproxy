@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mosajjal/sniproxy/v2/pkg/acl"
@@ -73,6 +74,10 @@ type Config struct {
 	PublicIPv4            string   `yaml:"public_ipv4"`
 	PublicIPv6            string   `yaml:"public_ipv6"`
 	PublicIpDns           string   `yaml:"public_ip_dns"`
+	PublicIPRefreshInterval int    `yaml:"public_ip_refresh_interval"` // in seconds, 0 means no refresh
+	publicIPMutex         sync.RWMutex `yaml:"-"`
+	publicIPLastUpdate    time.Time    `yaml:"-"`
+	logger                *zerolog.Logger `yaml:"-"`
 	UpstreamDNS           string   `yaml:"upstream_dns"`
 	UpstreamDNSOverSocks5 bool     `yaml:"upstream_dns_over_socks5"`
 	UpstreamSOCKS5        string   `yaml:"upstream_socks5"`
@@ -141,7 +146,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("at least one HTTP or HTTPS binding is required")
 	}
 
-	if c.PublicIPv4 == "" && c.PublicIPv6 == "" {
+	ipv4, ipv6 := c.GetPublicIPs()
+	if ipv4 == "" && ipv6 == "" {
 		return fmt.Errorf("at least one public IP (IPv4 or IPv6) is required")
 	}
 
@@ -287,4 +293,112 @@ func (c *Config) SetBindHTTPSListeners(_ zerolog.Logger) error {
 	}
 	c.BindHTTPSListeners = bindAddresses
 	return nil
+}
+
+// refreshPublicIPs updates the public IP addresses from DNS or auto-detection
+// This function is called internally and assumes the write lock is already held
+func (c *Config) refreshPublicIPs() error {
+	if c.logger == nil {
+		return fmt.Errorf("logger not initialized")
+	}
+
+	var ipv4, ipv6 string
+	var err error
+
+	// if publicIpDns is configured, resolve it
+	if c.PublicIpDns != "" {
+		c.logger.Debug().Msgf("refreshing public IP addresses from DNS: %s", c.PublicIpDns)
+		ipv4, ipv6, err = GetPublicIPsFromDNS(c.PublicIpDns)
+		if err != nil {
+			return fmt.Errorf("failed to resolve FQDN %s: %w", c.PublicIpDns, err)
+		}
+		
+		if ipv4 != "" {
+			if c.PublicIPv4 != ipv4 {
+				c.logger.Info().Msgf("public IPv4 changed from %s to %s", c.PublicIPv4, ipv4)
+			}
+			c.PublicIPv4 = ipv4
+		}
+		
+		if ipv6 != "" {
+			if c.PublicIPv6 != ipv6 {
+				c.logger.Info().Msgf("public IPv6 changed from %s to %s", c.PublicIPv6, ipv6)
+			}
+			c.PublicIPv6 = ipv6
+		}
+	} else {
+		// Auto-detect IPs based on preferred version
+		preferredVer := ParseIPVersion(c.PreferredVersion)
+		
+		if preferredVer != IPVersionIPv6Only {
+			ipv4, err = GetPublicIPv4()
+			if err != nil {
+				c.logger.Warn().Msgf("failed to refresh public IPv4: %s", err)
+			} else if c.PublicIPv4 != ipv4 {
+				c.logger.Info().Msgf("public IPv4 changed from %s to %s", c.PublicIPv4, ipv4)
+				c.PublicIPv4 = ipv4
+			}
+		}
+		
+		if preferredVer != IPVersionIPv4Only {
+			ipv6, err = GetPublicIPv6()
+			if err != nil {
+				c.logger.Warn().Msgf("failed to refresh public IPv6: %s", err)
+			} else if c.PublicIPv6 != ipv6 {
+				c.logger.Info().Msgf("public IPv6 changed from %s to %s", c.PublicIPv6, ipv6)
+				c.PublicIPv6 = ipv6
+			}
+		}
+	}
+
+	c.publicIPLastUpdate = time.Now()
+	return nil
+}
+
+// GetPublicIPs returns the current public IP addresses, refreshing them if necessary
+// This method is thread-safe and will automatically refresh IPs if the refresh interval has passed
+func (c *Config) GetPublicIPs() (ipv4, ipv6 string) {
+	// Check if refresh is needed (read lock first for better performance)
+	if c.PublicIPRefreshInterval > 0 {
+		c.publicIPMutex.RLock()
+		needsRefresh := time.Since(c.publicIPLastUpdate) > time.Duration(c.PublicIPRefreshInterval)*time.Second
+		c.publicIPMutex.RUnlock()
+
+		if needsRefresh {
+			// Upgrade to write lock for refresh
+			c.publicIPMutex.Lock()
+			// Double-check in case another goroutine already refreshed
+			if time.Since(c.publicIPLastUpdate) > time.Duration(c.PublicIPRefreshInterval)*time.Second {
+				if err := c.refreshPublicIPs(); err != nil && c.logger != nil {
+					c.logger.Error().Msgf("failed to refresh public IPs: %s", err)
+				}
+			}
+			ipv4 = c.PublicIPv4
+			ipv6 = c.PublicIPv6
+			c.publicIPMutex.Unlock()
+			return
+		}
+	}
+
+	// Normal read
+	c.publicIPMutex.RLock()
+	ipv4 = c.PublicIPv4
+	ipv6 = c.PublicIPv6
+	c.publicIPMutex.RUnlock()
+	return
+}
+
+// SetPublicIPs sets the public IP addresses (used during initialization)
+// This method is thread-safe
+func (c *Config) SetPublicIPs(ipv4, ipv6 string) {
+	c.publicIPMutex.Lock()
+	defer c.publicIPMutex.Unlock()
+	c.PublicIPv4 = ipv4
+	c.PublicIPv6 = ipv6
+	c.publicIPLastUpdate = time.Now()
+}
+
+// InitLogger stores a reference to the logger for use in IP refresh
+func (c *Config) InitLogger(logger *zerolog.Logger) {
+	c.logger = logger
 }

@@ -75,8 +75,10 @@ func handle80(c *Config, l zerolog.Logger) http.HandlerFunc {
 			http.Error(w, "Could not reach origin server", 403)
 			return
 		}
+		// Get current public IPs (will auto-refresh if needed)
+		ipv4, ipv6 := c.GetPublicIPs()
 		// if the URL starts with the public IP, it needs to be skipped to avoid loops
-		if strings.HasPrefix(r.Host, c.PublicIPv4) || (c.PublicIPv6 != "" && strings.HasPrefix(r.Host, c.PublicIPv6)) {
+		if strings.HasPrefix(r.Host, ipv4) || (ipv6 != "" && strings.HasPrefix(r.Host, ipv6)) {
 			l.Warn().Msg("someone is requesting HTTP to sniproxy itself, ignoring...")
 			http.Error(w, "Could not reach origin server", 404)
 			return
