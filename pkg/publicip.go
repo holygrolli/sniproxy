@@ -81,3 +81,30 @@ func GetPublicIPv6() (string, error) {
 	}
 	return "", fmt.Errorf("could not determine the public IPv6 address, please specify it in the configuration")
 }
+
+// GetPublicIPsFromDNS resolves an FQDN and returns both IPv4 and IPv6 addresses
+// This function will return the first valid IPv4 and IPv6 addresses found for the given hostname
+func GetPublicIPsFromDNS(fqdn string) (ipv4 string, ipv6 string, err error) {
+	ips, err := net.LookupIP(fqdn)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to resolve FQDN %s: %w", fqdn, err)
+	}
+
+	if len(ips) == 0 {
+		return "", "", fmt.Errorf("no IP addresses found for FQDN %s", fqdn)
+	}
+
+	for _, ip := range ips {
+		if ip.To4() != nil && ipv4 == "" {
+			ipv4 = ip.String()
+		} else if ip.To4() == nil && ipv6 == "" {
+			ipv6 = cleanIPv6(ip.String())
+		}
+		// Break early if we found both
+		if ipv4 != "" && ipv6 != "" {
+			break
+		}
+	}
+
+	return ipv4, ipv6, nil
+}
