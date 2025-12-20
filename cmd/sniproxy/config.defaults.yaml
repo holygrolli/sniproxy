@@ -43,6 +43,8 @@ general:
   public_ipv4:
   # Public IPv6 of the server, reply address of DNS AAAA queries
   public_ipv6:
+  # FQDN to resolve for determining public IPv4 and IPv6 addresses. When set, this overrides public_ipv4 and public_ipv6 settings.
+  public_ip_dns:
   # allow connections from sniproxy to RFC1918 addresses. default is false.
   allow_conn_to_local: false
   # log level for the application. choices: debug, info, warn, error

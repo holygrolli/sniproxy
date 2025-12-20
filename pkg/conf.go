@@ -72,6 +72,7 @@ func (v IPVersion) String() string {
 type Config struct {
 	PublicIPv4            string   `yaml:"public_ipv4"`
 	PublicIPv6            string   `yaml:"public_ipv6"`
+	PublicIpDns           string   `yaml:"public_ip_dns"`
 	UpstreamDNS           string   `yaml:"upstream_dns"`
 	UpstreamDNSOverSocks5 bool     `yaml:"upstream_dns_over_socks5"`
 	UpstreamSOCKS5        string   `yaml:"upstream_socks5"`

@@ -163,35 +163,62 @@ func main() {
 	c.BindHTTPSAdditional = generalConfig.Strings("bind_https_additional")
 	c.Interface = generalConfig.String("interface")
 	c.PreferredVersion = generalConfig.String("preferred_version")
+	c.PublicIpDns = generalConfig.String("public_ip_dns")
 
-	// if preferred version is ipv6only, we don't need to check for ipv4 public ip
-	if c.PreferredVersion != "ipv6only" {
-		c.PublicIPv4 = generalConfig.String("public_ipv4")
-		if c.PublicIPv4 == "" {
-			var err error
-			c.PublicIPv4, err = sniproxy.GetPublicIPv4()
-			if err != nil {
-				logger.Fatal().Msgf("failed to get public IPv4, while ipv4 is enabled in preferred_version: %s", err)
-			}
-			logger.Info().Msgf("public IPv4 (automatically determined): %s", c.PublicIPv4)
-		} else {
-			logger.Info().Msgf("public IPv4 (manually provided): %s", c.PublicIPv4)
+	// if publicIpDns is configured, resolve it to get both IPv4 and IPv6 addresses
+	// this overrides any other public IP configuration
+	if c.PublicIpDns != "" {
+		logger.Info().Msgf("resolving FQDN %s to determine public IP addresses", c.PublicIpDns)
+		ipv4FromDns, ipv6FromDns, err := sniproxy.GetPublicIPsFromDNS(c.PublicIpDns)
+		if err != nil {
+			logger.Fatal().Msgf("failed to resolve FQDN %s: %s", c.PublicIpDns, err)
 		}
-	}
-	// if preferred version is ipv4only, we don't need to check for ipv6 public ip
-	if c.PreferredVersion != "ipv4only" {
-		c.PublicIPv6 = generalConfig.String("public_ipv6")
-		if c.PublicIPv6 == "" {
-			var err error
-			c.PublicIPv6, err = sniproxy.GetPublicIPv6()
-			if err != nil {
-				logger.Fatal().Msgf("failed to get public IPv6, while ipv6 is enabled in preferred_version: %s", err)
-			}
-			logger.Info().Msgf("public IPv6 (automatically determined): %s", c.PublicIPv6)
+		
+		if ipv4FromDns != "" {
+			c.PublicIPv4 = ipv4FromDns
+			logger.Info().Msgf("public IPv4 (resolved from DNS): %s", c.PublicIPv4)
 		} else {
-			logger.Info().Msgf("public IPv6 (manually provided): %s", c.PublicIPv6)
+			logger.Warn().Msgf("no IPv4 address found for FQDN %s", c.PublicIpDns)
 		}
-	}
+		
+		if ipv6FromDns != "" {
+			c.PublicIPv6 = ipv6FromDns
+			logger.Info().Msgf("public IPv6 (resolved from DNS): %s", c.PublicIPv6)
+		} else {
+			logger.Warn().Msgf("no IPv6 address found for FQDN %s", c.PublicIpDns)
+		}
+	} else {
+		// Original logic when publicIpDns is not configured
+
+		// if preferred version is ipv6only, we don't need to check for ipv4 public ip
+		if c.PreferredVersion != "ipv6only" {
+			c.PublicIPv4 = generalConfig.String("public_ipv4")
+			if c.PublicIPv4 == "" {
+				var err error
+				c.PublicIPv4, err = sniproxy.GetPublicIPv4()
+				if err != nil {
+					logger.Fatal().Msgf("failed to get public IPv4, while ipv4 is enabled in preferred_version: %s", err)
+				}
+				logger.Info().Msgf("public IPv4 (automatically determined): %s", c.PublicIPv4)
+			} else {
+				logger.Info().Msgf("public IPv4 (manually provided): %s", c.PublicIPv4)
+			}
+		}
+		// if preferred version is ipv4only, we don't need to check for ipv6 public ip
+		if c.PreferredVersion != "ipv4only" {
+			c.PublicIPv6 = generalConfig.String("public_ipv6")
+			if c.PublicIPv6 == "" {
+				var err error
+				c.PublicIPv6, err = sniproxy.GetPublicIPv6()
+				if err != nil {
+					logger.Fatal().Msgf("failed to get public IPv6, while ipv6 is enabled in preferred_version: %s", err)
+				}
+				logger.Info().Msgf("public IPv6 (automatically determined): %s", c.PublicIPv6)
+			} else {
+				logger.Info().Msgf("public IPv6 (manually provided): %s", c.PublicIPv6)
+			}
+		}
+	} // end of publicIpDns else block
 
 	// in any case, at least one public IP address is needed to run the server. if both are empty, we can't proceed
 	if c.PublicIPv4 == "" && c.PublicIPv6 == "" {
