@@ -24,11 +24,14 @@ func isSelf(c *Config, ip netip.Addr) bool {
 	condition1 := ip.IsLoopback() ||
 		ip.IsPrivate() || ip == (netip.IPv4Unspecified())
 
-	if c.PublicIPv4 != "" {
-		condition1 = condition1 || (ip == netip.MustParseAddr(c.PublicIPv4))
+	// Get current public IPs (will auto-refresh if needed)
+	ipv4, ipv6 := c.GetPublicIPs()
+
+	if ipv4 != "" {
+		condition1 = condition1 || (ip == netip.MustParseAddr(ipv4))
 	}
-	if c.PublicIPv6 != "" {
-		condition1 = condition1 || (ip == netip.MustParseAddr(c.PublicIPv6))
+	if ipv6 != "" {
+		condition1 = condition1 || (ip == netip.MustParseAddr(ipv6))
 	}
 	if condition1 {
 		return true
