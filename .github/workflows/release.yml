@@ -1,16 +1,17 @@
 name: Publish binaries on Release
 on:
-  release:
-    types: [created]
+  workflow_dispatch:
 
 jobs:
   releases-matrix:
     name: Release Go Binary
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     strategy:
       matrix:
         # build and publish in parallel: linux/386, linux/amd64, windows/386, windows/amd64, darwin/386, darwin/amd64
-        goos: [linux, windows, darwin, freebsd, openbsd]
+        goos: [linux, darwin]
         goarch: ["386", amd64, arm64, arm]
         exclude:
           - goarch: "386"
