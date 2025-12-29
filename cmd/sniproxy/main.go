@@ -177,22 +177,22 @@ func main() {
 		if err != nil {
 			logger.Fatal().Msgf("failed to resolve FQDN %s: %s", c.PublicIpDns, err)
 		}
-		
+
 		if ipv4FromDns != "" {
 			logger.Info().Msgf("public IPv4 (resolved from DNS): %s", ipv4FromDns)
 		} else {
 			logger.Warn().Msgf("no IPv4 address found for FQDN %s", c.PublicIpDns)
 		}
-		
+
 		if ipv6FromDns != "" {
 			logger.Info().Msgf("public IPv6 (resolved from DNS): %s", ipv6FromDns)
 		} else {
 			logger.Warn().Msgf("no IPv6 address found for FQDN %s", c.PublicIpDns)
 		}
-		
+
 		// Use SetPublicIPs to initialize with thread-safe method
 		c.SetPublicIPs(ipv4FromDns, ipv6FromDns)
-		
+
 		if c.PublicIPRefreshInterval > 0 {
 			logger.Info().Msgf("public IP refresh enabled: will refresh every %d seconds", c.PublicIPRefreshInterval)
 		}
@@ -265,7 +265,7 @@ func main() {
 	c.ProxiedHTTPS = metrics.GetOrRegisterCounter("https.requests.proxied", metrics.DefaultRegistry)
 
 	if c.BindPrometheus != "" {
-		p := prometheusmetrics.NewPrometheusProvider(metrics.DefaultRegistry, "sniproxy", c.PublicIPv4, prometheus.DefaultRegisterer, 1*time.Second)
+		p := prometheusmetrics.NewPrometheusProvider(metrics.DefaultRegistry, "sniproxy", "global", prometheus.DefaultRegisterer, 1*time.Second)
 		go p.UpdatePrometheusMetrics()
 		go func() {
 			http.Handle("/metrics", promhttp.Handler())
