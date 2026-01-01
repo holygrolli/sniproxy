@@ -24,6 +24,8 @@ type domain struct {
 	routeFQDNs      map[string]uint8
 	logger          *zerolog.Logger
 	priority        uint
+	config          interface{} // Will store Config interface with GetPublicIPs() method
+	publicIpDns     string      // Cached PublicIpDns value
 }
 
 const (
@@ -38,6 +40,37 @@ func (d domain) inDomainList(fqdn string) bool {
 		fqdn = fqdn + "."
 	}
 	fqdnLower := strings.ToLower(fqdn)
+
+	// Check if domain matches current public IPs or PublicIpDns
+	if d.config != nil {
+		type ConfigWithIPs interface {
+			GetPublicIPs() (string, string)
+		}
+		if cfg, ok := d.config.(ConfigWithIPs); ok {
+			ipv4, ipv6 := cfg.GetPublicIPs()
+			// Check if domain matches current IPv4
+			if ipv4 != "" {
+				ipv4WithDot := ipv4
+				if !strings.HasSuffix(ipv4WithDot, ".") {
+					ipv4WithDot = ipv4WithDot + "."
+				}
+				if strings.ToLower(ipv4WithDot) == fqdnLower {
+					return false // Should go through proxy
+				}
+			}
+		}
+		// Check if domain matches PublicIpDns hostname
+		if d.publicIpDns != "" {
+			publicDnsWithDot := d.publicIpDns
+			if !strings.HasSuffix(publicDnsWithDot, ".") {
+				publicDnsWithDot = publicDnsWithDot + "."
+			}
+			if strings.ToLower(publicDnsWithDot) == fqdnLower {
+				return false // Should go through proxy
+			}
+		}
+	}
+
 	// check for fqdn match
 	if d.routeFQDNs[fqdnLower] == matchFQDN {
 		return false
@@ -164,6 +197,9 @@ func (d domain) Priority() uint {
 }
 
 func (d *domain) ConfigAndStart(logger *zerolog.Logger, c *koanf.Koanf) error {
+	// Read global config values before cutting
+	d.publicIpDns = c.String("public_ip_dns")
+
 	c = c.Cut(fmt.Sprintf("acl.%s", d.Name()))
 	d.logger = logger
 	d.routePrefixes = tst.New()
@@ -172,8 +208,19 @@ func (d *domain) ConfigAndStart(logger *zerolog.Logger, c *koanf.Koanf) error {
 	d.Path = c.String("path")
 	d.priority = uint(c.Int("priority"))
 	d.RefreshInterval = c.Duration("refresh_interval")
+
+	if d.publicIpDns != "" {
+		d.logger.Info().Msgf("domain ACL will dynamically check against PublicIpDns: %s", d.publicIpDns)
+	}
+	d.logger.Info().Msg("domain ACL will dynamically check against current public IPs")
+
 	go d.LoadDomainsCSVWorker()
 	return nil
+}
+
+// SetConfig sets the config reference for dynamic IP checking
+func (d *domain) SetConfig(config interface{}) {
+	d.config = config
 }
 
 // make domain available to the ACL system at import time

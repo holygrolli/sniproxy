@@ -256,6 +256,9 @@ func main() {
 		return
 	}
 
+	// Inject Config reference into ACLs that need it (e.g., domain ACL for dynamic IP checking)
+	acl.InjectConfig(c.ACL, &c)
+
 	// set up metrics
 	c.ReceivedDNS = metrics.GetOrRegisterCounter("dns.requests.received", metrics.DefaultRegistry)
 	c.ProxiedDNS = metrics.GetOrRegisterCounter("dns.requests.proxied", metrics.DefaultRegistry)
