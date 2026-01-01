@@ -198,7 +198,7 @@ func (d domain) Priority() uint {
 
 func (d *domain) ConfigAndStart(logger *zerolog.Logger, c *koanf.Koanf) error {
 	// Read global config values before cutting
-	d.publicIpDns = c.String("public_ip_dns")
+	d.publicIpDns = c.String("general.public_ip_dns")
 
 	c = c.Cut(fmt.Sprintf("acl.%s", d.Name()))
 	d.logger = logger
