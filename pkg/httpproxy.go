@@ -58,6 +58,68 @@ func RunHTTP(c *Config, bind string, l zerolog.Logger) {
 	}
 }
 
+// serveStatusPage serves a simple HTML page showing the proxy's public IP information
+func serveStatusPage(w http.ResponseWriter, ipv4, ipv6, dnsName string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+
+	html := `<!DOCTYPE html>
+<html>
+<head>
+	<title>SNI Proxy Status</title>
+	<style>
+		body { font-family: Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }
+		.container { max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+		h1 { color: #333; }
+		.info { margin: 20px 0; }
+		.label { font-weight: bold; color: #666; }
+		.value { color: #333; font-family: monospace; background-color: #f0f0f0; padding: 4px 8px; border-radius: 4px; }
+		.na { color: #999; font-style: italic; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>SNI Proxy Status</h1>
+		<div class="info">
+			<span class="label">IPv4 Address:</span> `
+
+	if ipv4 != "" {
+		html += `<span class="value">` + ipv4 + `</span>`
+	} else {
+		html += `<span class="na">Not configured</span>`
+	}
+
+	html += `
+		</div>
+		<div class="info">
+			<span class="label">IPv6 Address:</span> `
+
+	if ipv6 != "" {
+		html += `<span class="value">` + ipv6 + `</span>`
+	} else {
+		html += `<span class="na">Not configured</span>`
+	}
+
+	html += `
+		</div>
+		<div class="info">
+			<span class="label">DNS Name:</span> `
+
+	if dnsName != "" {
+		html += `<span class="value">` + dnsName + `</span>`
+	} else {
+		html += `<span class="na">Not configured</span>`
+	}
+
+	html += `
+		</div>
+	</div>
+</body>
+</html>`
+
+	w.Write([]byte(html))
+}
+
 func handle80(c *Config, l zerolog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		c.ReceivedHTTP.Inc(1)
@@ -79,9 +141,28 @@ func handle80(c *Config, l zerolog.Logger) http.HandlerFunc {
 		ipv4, ipv6 := c.GetPublicIPs()
 		// if the URL starts with the public IP, it needs to be skipped to avoid loops
 		if strings.HasPrefix(r.Host, ipv4) || (ipv6 != "" && strings.HasPrefix(r.Host, ipv6)) {
-			l.Warn().Msg("someone is requesting HTTP to sniproxy itself, ignoring...")
-			http.Error(w, "Could not reach origin server", 404)
+			l.Info().Msg("serving status page for request to sniproxy itself")
+			serveStatusPage(w, ipv4, ipv6, c.PublicIpDns)
 			return
+		}
+
+		// if PublicIpDns is configured, also check if the request is to the DNS name
+		if c.PublicIpDns != "" {
+			// Extract hostname without port
+			hostWithoutPort := r.Host
+			if colonIndex := strings.LastIndex(r.Host, ":"); colonIndex != -1 {
+				// Check if this is an IPv6 address or hostname with port
+				if !strings.HasPrefix(r.Host, "[") {
+					// Not an IPv6 address, so extract hostname
+					hostWithoutPort = r.Host[:colonIndex]
+				}
+			}
+
+			if hostWithoutPort == c.PublicIpDns {
+				l.Info().Str("host", r.Host).Msg("serving status page for request to sniproxy DNS name")
+				serveStatusPage(w, ipv4, ipv6, c.PublicIpDns)
+				return
+			}
 		}
 
 		l.Info().Str("method", r.Method).Str("host", r.Host).Str("url", r.URL.String()).Msg("request received")
