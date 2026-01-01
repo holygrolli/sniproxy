@@ -89,5 +89,19 @@ func MakeDecision(c *ConnInfo, a []ACL) error {
 	return nil
 }
 
+// InjectConfig injects the Config reference into ACLs that need it (e.g., domain ACL)
+func InjectConfig(a []ACL, config interface{}) {
+	for _, acl := range a {
+		if acl.Name() == "domain" {
+			type ConfigSetter interface {
+				SetConfig(interface{})
+			}
+			if setter, ok := acl.(ConfigSetter); ok {
+				setter.SetConfig(config)
+			}
+		}
+	}
+}
+
 // each ACL should register itself by appending itself to this list
 var availableACLs []ACL
