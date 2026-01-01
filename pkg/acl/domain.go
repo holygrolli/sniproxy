@@ -47,7 +47,7 @@ func (d domain) inDomainList(fqdn string) bool {
 			GetPublicIPs() (string, string)
 		}
 		if cfg, ok := d.config.(ConfigWithIPs); ok {
-			ipv4, ipv6 := cfg.GetPublicIPs()
+			ipv4 := cfg.GetPublicIPs()
 			// Check if domain matches current IPv4
 			if ipv4 != "" {
 				ipv4WithDot := ipv4
