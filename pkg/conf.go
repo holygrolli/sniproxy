@@ -2,6 +2,7 @@ package sniproxy
 
 import (
 	"fmt"
+	"net"
 	"net/netip"
 	"net/url"
 	"strconv"
