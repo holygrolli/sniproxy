@@ -139,16 +139,25 @@ func handle80(c *Config, l zerolog.Logger) http.HandlerFunc {
 		}
 		// Get current public IPs (will auto-refresh if needed)
 		ipv4, ipv6 := c.GetPublicIPs()
-		
+
 		// Check if request is to the proxy's own domains (public IPs, DNS name, or local domain suffixes)
 		// Extract hostname without port for comparison
 		hostWithoutPort := r.Host
-		if colonIndex := strings.LastIndex(r.Host, ":"); colonIndex != -1 {
-			// Check if this is an IPv6 address or hostname with port
-			if !strings.HasPrefix(r.Host, "[") {
-				// Not an IPv6 address, so extract hostname
+		// Handle IPv6 addresses with brackets
+		if strings.HasPrefix(r.Host, "[") {
+			// IPv6 address with brackets: [::1] or [::1]:8080
+			closeBracket := strings.Index(r.Host, "]")
+			if closeBracket != -1 {
+				// Extract the IPv6 without brackets
+				hostWithoutPort = r.Host[1:closeBracket]
+			}
+		} else if colonIndex := strings.LastIndex(r.Host, ":"); colonIndex != -1 {
+			// Check if this looks like IPv6 (multiple colons) or hostname:port (single colon)
+			if strings.Count(r.Host, ":") == 1 {
+				// Single colon, so it's hostname:port or ipv4:port
 				hostWithoutPort = r.Host[:colonIndex]
 			}
+			// If multiple colons, it's a plain IPv6 without brackets, keep as-is
 		}
 
 		if c.IsStatusPageDomain(hostWithoutPort) {
