@@ -17,15 +17,16 @@ import (
 // domain ACL makes a decision on a connection based on the domain name derived
 // from client hello's SNI. It can be used to skip the sni proxy for certain domains
 type domain struct {
-	Path            string        `yaml:"domain.path"`
-	RefreshInterval time.Duration `yaml:"domain.refresh_interval"`
-	routePrefixes   *tst.TernarySearchTree
-	routeSuffixes   *tst.TernarySearchTree
-	routeFQDNs      map[string]uint8
-	logger          *zerolog.Logger
-	priority        uint
-	config          interface{} // Will store Config interface with GetPublicIPs() method
-	publicIpDns     string      // Cached PublicIpDns value
+	Path              string        `yaml:"domain.path"`
+	RefreshInterval   time.Duration `yaml:"domain.refresh_interval"`
+	routePrefixes     *tst.TernarySearchTree
+	routeSuffixes     *tst.TernarySearchTree
+	routeFQDNs        map[string]uint8
+	logger            *zerolog.Logger
+	priority          uint
+	config            interface{} // Will store Config interface with GetPublicIPs() method
+	publicIpDns       string      // Cached PublicIpDns value
+	localDomainSuffixes []string    // List of local domain suffixes (e.g., ".fritz.box", ".lan")
 }
 
 const (
@@ -67,6 +68,31 @@ func (d domain) inDomainList(fqdn string) bool {
 			}
 			if strings.ToLower(publicDnsWithDot) == fqdnLower {
 				return false // Should go through proxy
+			}
+			
+			// If publicIpDns is a FQDN (not an IP address), check hostname and all local domain suffixes
+			if net.ParseIP(d.publicIpDns) == nil && strings.Contains(d.publicIpDns, ".") {
+				hostname := strings.Split(d.publicIpDns, ".")[0]
+				
+				// Check bare hostname
+				hostnameWithDot := hostname
+				if !strings.HasSuffix(hostnameWithDot, ".") {
+					hostnameWithDot = hostnameWithDot + "."
+				}
+				if strings.ToLower(hostnameWithDot) == fqdnLower {
+					return false // Should go through proxy
+				}
+				
+				// Check all configured local domain suffixes
+				for _, suffix := range d.localDomainSuffixes {
+					localDomain := hostname + suffix
+					if !strings.HasSuffix(localDomain, ".") {
+						localDomain = localDomain + "."
+					}
+					if strings.ToLower(localDomain) == fqdnLower {
+						return false // Should go through proxy
+					}
+				}
 			}
 		}
 	}
@@ -208,9 +234,19 @@ func (d *domain) ConfigAndStart(logger *zerolog.Logger, c *koanf.Koanf) error {
 	d.Path = c.String("path")
 	d.priority = uint(c.Int("priority"))
 	d.RefreshInterval = c.Duration("refresh_interval")
+	
+	// Read local domain suffixes from config
+	d.localDomainSuffixes = c.Strings("local_domain_suffixes")
+	// Default to common local domain suffixes if not configured
+	if len(d.localDomainSuffixes) == 0 {
+		d.localDomainSuffixes = []string{".fritz.box", ".lan"}
+	}
 
 	if d.publicIpDns != "" {
 		d.logger.Info().Msgf("domain ACL will dynamically check against PublicIpDns: %s", d.publicIpDns)
+		if net.ParseIP(d.publicIpDns) == nil && strings.Contains(d.publicIpDns, ".") {
+			d.logger.Info().Msgf("domain ACL will check local domain suffixes: %v", d.localDomainSuffixes)
+		}
 	}
 	d.logger.Info().Msg("domain ACL will dynamically check against current public IPs")
 
