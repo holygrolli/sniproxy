@@ -74,6 +74,7 @@ type Config struct {
 	PublicIPv4            string   `yaml:"public_ipv4"`
 	PublicIPv6            string   `yaml:"public_ipv6"`
 	PublicIpDns           string   `yaml:"public_ip_dns"`
+	LocalDomainSuffixes   []string `yaml:"local_domain_suffixes"` // suffixes like .fritz.box, .lan for local domain matching
 	PublicIPRefreshInterval int    `yaml:"public_ip_refresh_interval"` // in seconds, 0 means no refresh
 	publicIPMutex         sync.RWMutex `yaml:"-"`
 	publicIPLastUpdate    time.Time    `yaml:"-"`
@@ -396,6 +397,87 @@ func (c *Config) SetPublicIPs(ipv4, ipv6 string) {
 	c.PublicIPv4 = ipv4
 	c.PublicIPv6 = ipv6
 	c.publicIPLastUpdate = time.Now()
+}
+
+// IsStatusPageDomain checks if a given domain matches the proxy's own domains
+// (current public IPs, PublicIpDns, hostname, or local domain suffix variations)
+// Returns true if the domain should show the status page
+func (c *Config) IsStatusPageDomain(domain string) bool {
+	// Normalize domain with trailing dot
+	fqdn := domain
+	if !strings.HasSuffix(fqdn, ".") {
+		fqdn = fqdn + "."
+	}
+	fqdnLower := strings.ToLower(fqdn)
+
+	// Get current public IPs
+	ipv4, ipv6 := c.GetPublicIPs()
+
+	// Check if domain matches current IPv4
+	if ipv4 != "" {
+		ipv4WithDot := ipv4
+		if !strings.HasSuffix(ipv4WithDot, ".") {
+			ipv4WithDot = ipv4WithDot + "."
+		}
+		if strings.ToLower(ipv4WithDot) == fqdnLower {
+			return true
+		}
+	}
+
+	// Check if domain matches current IPv6
+	if ipv6 != "" {
+		ipv6WithDot := ipv6
+		if !strings.HasSuffix(ipv6WithDot, ".") {
+			ipv6WithDot = ipv6WithDot + "."
+		}
+		if strings.ToLower(ipv6WithDot) == fqdnLower {
+			return true
+		}
+	}
+
+	// Check if domain matches PublicIpDns hostname
+	if c.PublicIpDns != "" {
+		publicDnsWithDot := c.PublicIpDns
+		if !strings.HasSuffix(publicDnsWithDot, ".") {
+			publicDnsWithDot = publicDnsWithDot + "."
+		}
+		if strings.ToLower(publicDnsWithDot) == fqdnLower {
+			return true
+		}
+
+		// If publicIpDns is a FQDN (not an IP address), check hostname and all local domain suffixes
+		if net.ParseIP(c.PublicIpDns) == nil && strings.Contains(c.PublicIpDns, ".") {
+			hostname := strings.Split(c.PublicIpDns, ".")[0]
+
+			// Check bare hostname
+			hostnameWithDot := hostname
+			if !strings.HasSuffix(hostnameWithDot, ".") {
+				hostnameWithDot = hostnameWithDot + "."
+			}
+			if strings.ToLower(hostnameWithDot) == fqdnLower {
+				return true
+			}
+
+			// Get local domain suffixes (use defaults if not configured)
+			localSuffixes := c.LocalDomainSuffixes
+			if len(localSuffixes) == 0 {
+				localSuffixes = []string{".fritz.box", ".lan"}
+			}
+
+			// Check all configured local domain suffixes
+			for _, suffix := range localSuffixes {
+				localDomain := hostname + suffix
+				if !strings.HasSuffix(localDomain, ".") {
+					localDomain = localDomain + "."
+				}
+				if strings.ToLower(localDomain) == fqdnLower {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // InitLogger stores a reference to the logger for use in IP refresh

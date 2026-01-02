@@ -139,30 +139,22 @@ func handle80(c *Config, l zerolog.Logger) http.HandlerFunc {
 		}
 		// Get current public IPs (will auto-refresh if needed)
 		ipv4, ipv6 := c.GetPublicIPs()
-		// if the URL starts with the public IP, it needs to be skipped to avoid loops
-		if strings.HasPrefix(r.Host, ipv4) || (ipv6 != "" && strings.HasPrefix(r.Host, ipv6)) {
-			l.Info().Msg("serving status page for request to sniproxy itself")
-			serveStatusPage(w, ipv4, ipv6, c.PublicIpDns)
-			return
+		
+		// Check if request is to the proxy's own domains (public IPs, DNS name, or local domain suffixes)
+		// Extract hostname without port for comparison
+		hostWithoutPort := r.Host
+		if colonIndex := strings.LastIndex(r.Host, ":"); colonIndex != -1 {
+			// Check if this is an IPv6 address or hostname with port
+			if !strings.HasPrefix(r.Host, "[") {
+				// Not an IPv6 address, so extract hostname
+				hostWithoutPort = r.Host[:colonIndex]
+			}
 		}
 
-		// if PublicIpDns is configured, also check if the request is to the DNS name
-		if c.PublicIpDns != "" {
-			// Extract hostname without port
-			hostWithoutPort := r.Host
-			if colonIndex := strings.LastIndex(r.Host, ":"); colonIndex != -1 {
-				// Check if this is an IPv6 address or hostname with port
-				if !strings.HasPrefix(r.Host, "[") {
-					// Not an IPv6 address, so extract hostname
-					hostWithoutPort = r.Host[:colonIndex]
-				}
-			}
-
-			if hostWithoutPort == c.PublicIpDns {
-				l.Info().Str("host", r.Host).Msg("serving status page for request to sniproxy DNS name")
-				serveStatusPage(w, ipv4, ipv6, c.PublicIpDns)
-				return
-			}
+		if c.IsStatusPageDomain(hostWithoutPort) {
+			l.Info().Str("host", r.Host).Msg("serving status page for request to sniproxy domain")
+			serveStatusPage(w, ipv4, ipv6, c.PublicIpDns)
+			return
 		}
 
 		l.Info().Str("method", r.Method).Str("host", r.Host).Str("url", r.URL.String()).Msg("request received")

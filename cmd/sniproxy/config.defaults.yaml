@@ -47,6 +47,12 @@ general:
   public_ip_dns:
   # Interval in seconds to refresh public IP addresses when public_ip_dns is set. 0 means no refresh (only at startup). Default: 300 (5 minutes)
   public_ip_refresh_interval: 300
+  # Local domain suffixes to check for status page display (e.g., ".fritz.box", ".lan"). 
+  # When public_ip_dns is a FQDN, the bare hostname combined with these suffixes will also serve the status page.
+  # Default: [".fritz.box", ".lan"] if not specified
+  local_domain_suffixes:
+    - ".fritz.box"
+    - ".lan"
   # allow connections from sniproxy to RFC1918 addresses. default is false.
   allow_conn_to_local: false
   # log level for the application. choices: debug, info, warn, error
