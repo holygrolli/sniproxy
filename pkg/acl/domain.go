@@ -24,9 +24,7 @@ type domain struct {
 	routeFQDNs        map[string]uint8
 	logger            *zerolog.Logger
 	priority          uint
-	config            interface{} // Will store Config interface with GetPublicIPs() method
-	publicIpDns       string      // Cached PublicIpDns value
-	localDomainSuffixes []string    // List of local domain suffixes (e.g., ".fritz.box", ".lan")
+	config            interface{} // Will store Config interface with IsStatusPageDomain() method
 }
 
 const (
@@ -42,57 +40,17 @@ func (d domain) inDomainList(fqdn string) bool {
 	}
 	fqdnLower := strings.ToLower(fqdn)
 
-	// Check if domain matches current public IPs or PublicIpDns
+	// Check if domain matches proxy's own domains (public IPs, PublicIpDns, or local domain suffixes)
+	// If it does, it should go through proxy (return false)
 	if d.config != nil {
-		type ConfigWithIPs interface {
-			GetPublicIPs() (string, string)
+		type ConfigWithStatusCheck interface {
+			IsStatusPageDomain(domain string) bool
 		}
-		if cfg, ok := d.config.(ConfigWithIPs); ok {
-			ipv4, _ := cfg.GetPublicIPs()
-			// Check if domain matches current IPv4
-			if ipv4 != "" {
-				ipv4WithDot := ipv4
-				if !strings.HasSuffix(ipv4WithDot, ".") {
-					ipv4WithDot = ipv4WithDot + "."
-				}
-				if strings.ToLower(ipv4WithDot) == fqdnLower {
-					return false // Should go through proxy
-				}
-			}
-		}
-		// Check if domain matches PublicIpDns hostname
-		if d.publicIpDns != "" {
-			publicDnsWithDot := d.publicIpDns
-			if !strings.HasSuffix(publicDnsWithDot, ".") {
-				publicDnsWithDot = publicDnsWithDot + "."
-			}
-			if strings.ToLower(publicDnsWithDot) == fqdnLower {
+		if cfg, ok := d.config.(ConfigWithStatusCheck); ok {
+			// Remove trailing dot for the check as IsStatusPageDomain handles normalization
+			domainWithoutDot := strings.TrimSuffix(fqdnLower, ".")
+			if cfg.IsStatusPageDomain(domainWithoutDot) {
 				return false // Should go through proxy
-			}
-			
-			// If publicIpDns is a FQDN (not an IP address), check hostname and all local domain suffixes
-			if net.ParseIP(d.publicIpDns) == nil && strings.Contains(d.publicIpDns, ".") {
-				hostname := strings.Split(d.publicIpDns, ".")[0]
-				
-				// Check bare hostname
-				hostnameWithDot := hostname
-				if !strings.HasSuffix(hostnameWithDot, ".") {
-					hostnameWithDot = hostnameWithDot + "."
-				}
-				if strings.ToLower(hostnameWithDot) == fqdnLower {
-					return false // Should go through proxy
-				}
-				
-				// Check all configured local domain suffixes
-				for _, suffix := range d.localDomainSuffixes {
-					localDomain := hostname + suffix
-					if !strings.HasSuffix(localDomain, ".") {
-						localDomain = localDomain + "."
-					}
-					if strings.ToLower(localDomain) == fqdnLower {
-						return false // Should go through proxy
-					}
-				}
 			}
 		}
 	}
@@ -223,9 +181,7 @@ func (d domain) Priority() uint {
 }
 
 func (d *domain) ConfigAndStart(logger *zerolog.Logger, c *koanf.Koanf) error {
-	// Read global config values before cutting
-	d.publicIpDns = c.String("general.public_ip_dns")
-
+	// Cut to the domain-specific config section
 	c = c.Cut(fmt.Sprintf("acl.%s", d.Name()))
 	d.logger = logger
 	d.routePrefixes = tst.New()
@@ -234,21 +190,8 @@ func (d *domain) ConfigAndStart(logger *zerolog.Logger, c *koanf.Koanf) error {
 	d.Path = c.String("path")
 	d.priority = uint(c.Int("priority"))
 	d.RefreshInterval = c.Duration("refresh_interval")
-	
-	// Read local domain suffixes from config
-	d.localDomainSuffixes = c.Strings("local_domain_suffixes")
-	// Default to common local domain suffixes if not configured
-	if len(d.localDomainSuffixes) == 0 {
-		d.localDomainSuffixes = []string{".fritz.box", ".lan"}
-	}
 
-	if d.publicIpDns != "" {
-		d.logger.Info().Msgf("domain ACL will dynamically check against PublicIpDns: %s", d.publicIpDns)
-		if net.ParseIP(d.publicIpDns) == nil && strings.Contains(d.publicIpDns, ".") {
-			d.logger.Info().Msgf("domain ACL will check local domain suffixes: %v", d.localDomainSuffixes)
-		}
-	}
-	d.logger.Info().Msg("domain ACL will dynamically check against current public IPs")
+	d.logger.Info().Msg("domain ACL will dynamically check against proxy's own domains via shared method")
 
 	go d.LoadDomainsCSVWorker()
 	return nil
