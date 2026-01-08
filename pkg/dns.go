@@ -269,6 +269,7 @@ func handleDNS(c *Config, l zerolog.Logger) dns.HandlerFunc {
 				SrcIP:  w.RemoteAddr(),
 				Domain: q.Name,
 			}
+			l.Debug().Msgf("processing domain %s", q.Name)
 			acl.MakeDecision(&connInfo, c.ACL)
 			answers, err := processQuestion(c, l, q, connInfo.Decision)
 			if err != nil {
